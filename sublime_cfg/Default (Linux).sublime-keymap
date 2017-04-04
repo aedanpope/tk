@@ -1,7 +1,0 @@
-[
-
-  { "keys": ["ctrl+shift+c"], "command": "toggle_comment", "args": { "block": true } },
-  // Se ctrl+shift+d: delete_line
-  // (by default, ctrl+shift+k duplicates a line).
-  { "keys": ["ctrl+shift+d"], "command": "run_macro_file", "args": {"file": "res://Packages/Default/Delete Line.sublime-macro"} },
-]
