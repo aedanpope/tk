@@ -1,9 +1,13 @@
+// TO TEST:
+// g++ bp.cpp -std=c++11 -g && echo -e "run\nbt" | gdb ./a.out
+
 #include <iostream>
 #include <random>
 #include <cstdlib>
 #include <array>
 #include <vector>
 #include <tuple>
+#include <sstream>
 #include <algorithm>
 #include <cmath>
 #include <initializer_list>
@@ -48,6 +52,17 @@ Matrix init_matrix(int rows, int cols) {
     }
   }
   return m;
+}
+
+string matrix_string(Matrix m) {
+  stringstream ss;
+  for (int i = 0; i < m.size(); i ++) {
+    for (int j = 0; j < m[i].size(); j ++) {
+      ss << m[i][j]  << " ";
+    }
+    ss << endl;
+  }
+  return ss.str();
 }
 
 void print_matrix(Matrix m) {
@@ -167,11 +182,11 @@ tuple<vector<Matrix>, vector<Matrix>> feed_forward(Matrix inp_x, vector<Matrix> 
   vector<Matrix> inputs;
   vector<Matrix> activations;
 
-  for (int i = 0; i < weigths.size(); i ++) {
+  for (int i = 0; i < weights.size(); i ++) {
     Matrix W = weights[i];
     Matrix B = biases[i];
     Matrix Z = add(multiply(vals, W), B);
-    Matrix A = apply_activation(Z);
+    Matrix A = apply_logit(Z);
     inputs.push_back(Z);
     activations.push_back(A);
     vals = A;
@@ -189,7 +204,7 @@ void back_propagate(vector<Matrix> & weights, vector<Matrix> & biases,
   Matrix error = termwise_product(
         scale(2.0, add(activations[n-1], scale(-1.0, y))),
         apply_logit_dx(inputs[n-1]));
-  for (int i = weigths.size()-1; i >= 0; i --) {
+  for (int i = weights.size()-1; i >= 0; i --) {
     biases[i] = add(biases[i], scale(-learning_rate, error));
 
     Matrix prev_activations = i > 0 ? activations[i-1] : inp_x;
@@ -199,14 +214,15 @@ void back_propagate(vector<Matrix> & weights, vector<Matrix> & biases,
       // calc error for i-1
       error = termwise_product(multiply(transpose(weights[i]), error), apply_logit_dx(inputs[i-1]));
     }
-    weights[i] = add(weigths[i], scale(-learning_rate, norm(error)));
+    weights[i] = add(weights[i], scale(-learning_rate, norm(error)));
   }
 }
 
 Matrix col_vec(initializer_list<double> vals) {
   Matrix vec = init_matrix(1,vals.size());
-  for (int i = 0; i < vals.size(); i ++) {
-    vec[0][i] = vals[i];
+  int i = 0;
+  for (double v : vals) {
+    vec[0][i++] = v;
   }
   return vec;
 }
@@ -231,13 +247,14 @@ int run_stuff() {
   vector<Matrix> weights = {w1, w2};
   vector<Matrix> biases = {b1, b2};
 
-  Matrix x = col_vec(1, 2, 3);
-  Matrix y = col_vec(1+2, 2+3);
+  Matrix x = col_vec({1, 2, 3});
+  Matrix y = col_vec({1+2, 2+3});
 
   auto inputs_activations = feed_forward(x, weights, biases);
   Matrix pred_y = get<1>(inputs_activations)[1];
-  cout << "pred_y = " << pred_y << endl;
-  cout << "pred_y = (" << pred_y[0][0] << ", " << pred_y[0][1] << ")" endl;
+  cout << "x = " << matrix_string(x);
+  cout << "y = " << matrix_string(y);
+  cout << "pred_y = " << matrix_string(pred_y);
 
   back_propagate(weights, biases, x, get<0>(inputs_activations), get<1>(inputs_activations), y, 0.01);
   cout << "w1 = " << endl;
@@ -249,9 +266,9 @@ int run_stuff() {
 }
 
 int main() {
-  try {
+  // try {
     run_stuff();
-  } catch (runtime_error e) {
-      cout << "Runtime error: " << e.what();
-  }
+  // } catch (runtime_error e) {
+      // cout << "Runtime error: " << e.what();
+  // }
 }
