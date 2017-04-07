@@ -3,7 +3,10 @@
 #include <cstdlib>
 #include <array>
 #include <vector>
+#include <tuple>
+#include <algorithm>
 #include <cmath>
+#include <initializer_list>
 
 using namespace std;
 
@@ -56,6 +59,50 @@ void print_matrix(Matrix m) {
   }
 }
 
+Matrix scale(double t, Matrix a) {
+  Matrix result = init_matrix(a.size(), a[0].size());
+  for (int i = 0 ; i < result.size(); i ++) {
+    for (int j = 0; j < result[i].size(); j ++) {
+      result[i][j] = a[i][j] *t;
+    }
+  }
+  return result;
+}
+
+Matrix transpose(Matrix a) {
+  Matrix result = init_matrix(a[0].size(), a.size());
+  for (int i = 0 ; i < result.size(); i ++) {
+    for (int j = 0; j < result[i].size(); j ++) {
+      result[i][j] = a[j][i];
+    }
+  }
+  return result;
+}
+
+Matrix add(Matrix a, Matrix b) {
+  if (a.size() != b.size()) error("a and b are not compatible");
+  if (a[0].size() != b[0].size()) error("a and b are not compatible");
+  Matrix result = init_matrix(a.size(), a[0].size());
+  for (int i = 0 ; i < result.size(); i ++) {
+    for (int j = 0; j < result[i].size(); j ++) {
+      result[i][j] = a[i][j] + b[i][j];
+    }
+  }
+  return result;
+}
+
+Matrix termwise_product(Matrix a, Matrix b) {
+  if (a.size() != b.size()) error("a and b are not compatible");
+  if (a[0].size() != b[0].size()) error("a and b are not compatible");
+  Matrix result = init_matrix(a.size(), a[0].size());
+  for (int i = 0 ; i < result.size(); i ++) {
+    for (int j = 0; j < result[i].size(); j ++) {
+      result[i][j] = a[i][j] * b[i][j];
+    }
+  }
+  return result;
+}
+
 Matrix multiply(Matrix a, Matrix b) {
   Matrix result = init_matrix(a.size(), b[0].size());
   if (a[0].size() != b.size()) error("a and b are not compatible");
@@ -67,79 +114,136 @@ Matrix multiply(Matrix a, Matrix b) {
       for (int k = 0; k < a[i].size(); k ++) {
         val += a[i][k] * b[k][j];
       }
-
       result[i][j] = val;
     }
   }
-
   return result;
 }
 
-Matrix apply_layers(vector<Matrix> layers) {
-  Matrix vals = layers[0];
-  auto it = std::begin(layers);
-  it ++;
-  while (it != std::end(layers)) {
-    Matrix inputs = multiply(vals, *it);
-    // apply biases
-    // apply activation function
-    Matrix activations = inputs;
-    vals = activations;
-    it ++;
+Matrix norm(Matrix v) {
+  if (v[0].size() != 1) error("a is not a column vector");
+  double magnitude = 0;
+  for (int i = 0 ; i < v.size(); i ++) {
+    magnitude += v[i][0]*v[i][0];
   }
-  return vals;
+  magnitude = sqrt(magnitude);
+  Matrix result = init_matrix(v.size(), v[0].size());
+  for (int i = 0 ; i < v.size(); i ++) {
+    result[i][0] = v[i][0] / magnitude;
+  }
+  return result;
 }
 
-double run_nn(double x, vector<Matrix> layers) {
-  layers[0][0][0] = x;
-  return apply_layers(layers)[0][0];
+double logit(double x) {
+  return 1 / (1 + exp(-x));
+}
+double logit_dx(double x) {
+  return logit(x)*(1-logit(x));
+}
+
+Matrix apply_logit(Matrix a) {
+  Matrix result = init_matrix(a.size(), a[0].size());
+  for (int i = 0 ; i < result.size(); i ++) {
+    for (int j = 0; j < result[i].size(); j ++) {
+      result[i][j] = logit(a[i][j]);
+    }
+  }
+  return result;
+}
+
+Matrix apply_logit_dx(Matrix a) {
+  Matrix result = init_matrix(a.size(), a[0].size());
+  for (int i = 0 ; i < result.size(); i ++) {
+    for (int j = 0; j < result[i].size(); j ++) {
+      result[i][j] = logit_dx(a[i][j]);
+    }
+  }
+  return result;
+}
+
+tuple<vector<Matrix>, vector<Matrix>> feed_forward(Matrix inp_x, vector<Matrix> weights, vector<Matrix> biases) {
+  Matrix vals = inp_x;
+
+  vector<Matrix> inputs;
+  vector<Matrix> activations;
+
+  for (int i = 0; i < weigths.size(); i ++) {
+    Matrix W = weights[i];
+    Matrix B = biases[i];
+    Matrix Z = add(multiply(vals, W), B);
+    Matrix A = apply_activation(Z);
+    inputs.push_back(Z);
+    activations.push_back(A);
+    vals = A;
+  }
+  return tuple<vector<Matrix>, vector<Matrix>>(inputs, activations);
+}
+
+void back_propagate(vector<Matrix> & weights, vector<Matrix> & biases,
+      Matrix inp_x, vector<Matrix> inputs, vector<Matrix> activations,
+      Matrix y, double learning_rate) {
+  int n = weights.size();
+  Matrix loss = add(y, scale(-1.0, activations[n-1]));
+  // loss = (y-a_n])^2
+  // error = dLoss/da_n * logit_dx(inputs_n)
+  Matrix error = termwise_product(
+        scale(2.0, add(activations[n-1], scale(-1.0, y))),
+        apply_logit_dx(inputs[n-1]));
+  for (int i = weigths.size()-1; i >= 0; i --) {
+    biases[i] = add(biases[i], scale(-learning_rate, error));
+
+    Matrix prev_activations = i > 0 ? activations[i-1] : inp_x;
+    weights[i] = add(weights[i], scale(-learning_rate, multiply(error, transpose(prev_activations))));
+
+    if (i != 0) {
+      // calc error for i-1
+      error = termwise_product(multiply(transpose(weights[i]), error), apply_logit_dx(inputs[i-1]));
+    }
+    weights[i] = add(weigths[i], scale(-learning_rate, norm(error)));
+  }
+}
+
+Matrix col_vec(initializer_list<double> vals) {
+  Matrix vec = init_matrix(1,vals.size());
+  for (int i = 0; i < vals.size(); i ++) {
+    vec[0][i] = vals[i];
+  }
+  return vec;
 }
 
 int run_stuff() {
   cout << "foo" << endl;
-
-  // input layer: just one number, x
-  Matrix inp_x = init_matrix(1,1);
+  // f -> (x1,x2,x3) -> (x1+x2, x2+x3)
+  // input layer: three number, x
 
   // hidden_layer_1, 10 nodes fully connected to input layer.
-  Matrix h1 = init_matrix(1,10);
-  Matrix b1 = init_matrix(1,10); // biases
-  cout << "h1 = " << endl;
-  print_matrix(h1);
+  Matrix w1 = init_matrix(3,10);
+  Matrix b1 = init_matrix(1,10);
+  cout << "w1 = " << endl;
+  print_matrix(w1);
 
-  // hidden_layer_2, 5 nodes fully connected to h1.
-  Matrix h2 = init_matrix(10,5);
-  // biases, add this onto the vector after multiply by h2, but before applying activation function.
-  Matrix b2 = init_matrix(1,5);
-  cout << "h2 = " << endl;
-  print_matrix(h2);
+  // output layer, 2 numbers, 5 nodes fully connected to w1.
+  Matrix w2 = init_matrix(10,2);
+  Matrix b2 = init_matrix(1,2);
+  cout << "w2 = " << endl;
+  print_matrix(w2);
 
-  // output_layer, 1 node fully connected.
-  Matrix out = init_matrix(5,1);
-  cout << "out = " << endl;
-  print_matrix(out);
+  vector<Matrix> weights = {w1, w2};
+  vector<Matrix> biases = {b1, b2};
 
-  vector<Matrix> layers = {inp_x, h1, h2, out};
+  Matrix x = col_vec(1, 2, 3);
+  Matrix y = col_vec(1+2, 2+3);
 
-  double in_x = 1;
-  double out_y = run_nn(in_x, layers);
-  cout << "y(1) = " << y(in_x) << endl;
-  cout << "run_nn(1) = " << out_y << endl;
+  auto inputs_activations = feed_forward(x, weights, biases);
+  Matrix pred_y = get<1>(inputs_activations)[1];
+  cout << "pred_y = " << pred_y << endl;
+  cout << "pred_y = (" << pred_y[0][0] << ", " << pred_y[0][1] << ")" endl;
 
-  double loss = pow(y(in_x) - out_y, 2);
-  cout << "loss = " << loss << endl;
-
-  // optimizer = tf.train.GradientDescentOptimizer(0.01)
-  // train = optimizer.minimize(loss)
-
-  // loss
-
-  cout << "y(2) = " << y(2) << endl;
-  cout << "Phi(2) = " << run_nn(2, layers) << endl;
-
-  cout << "y(3) = " << y(3) << endl;
-  cout << "Phi(3) = " << run_nn(3, layers) << endl;
-
+  back_propagate(weights, biases, x, get<0>(inputs_activations), get<1>(inputs_activations), y, 0.01);
+  cout << "w1 = " << endl;
+  print_matrix(w1);
+  cout << "w2 = " << endl;
+  print_matrix(w2);
 
   cout << "bar" << endl;
 }
