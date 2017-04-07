@@ -208,6 +208,9 @@ void back_propagate(vector<Matrix> & weights, vector<Matrix> & biases,
     biases[i] = add(biases[i], scale(-learning_rate, error));
 
     Matrix prev_activations = i > 0 ? activations[i-1] : inp_x;
+    cout << "i = " << i << endl;
+    cout << "error = " << matrix_string(error);
+    cout << "prev_activations = " << matrix_string(prev_activations);
     weights[i] = add(weights[i], scale(-learning_rate, multiply(error, transpose(prev_activations))));
 
     if (i != 0) {
