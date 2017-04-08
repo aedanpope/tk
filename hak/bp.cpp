@@ -24,7 +24,7 @@ typedef vector<vector<double>> Tensor2;
 default_random_engine re;
 
 // Verbosity
-int V = 3;
+int V = 30;
 
 
 
