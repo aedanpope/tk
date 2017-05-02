@@ -24,7 +24,7 @@ typedef vector<vector<double>> Tensor2;
 default_random_engine re;
 
 // Verbosity
-int V = 30;
+int V = 3;
 
 
 
@@ -53,7 +53,8 @@ Matrix init_matrix(int rows, int cols) {
 
   for (int i = 0; i < rows; i ++) {
     for (int j = 0; j < cols; j ++) {
-      m[i][j] = dist(re);
+      // m[i][j] = dist(re);
+      m[i][j] = 0;
     }
   }
   return m;
@@ -265,34 +266,50 @@ int run_stuff() {
   // input layer: three number, x
 
 
-  // hid=10 -> error @100k = 0.0562022 -0.0581912, -0.197466 0.221695, 0.0871238 -0.0180035
-  // hid=30 -> error @100k = -0.0322616 0.0764045, 0.0306207 0.0215664, -0.0015342 0.0207133
-  // H1=10, H2=5 -> error @100k = -0.0322616 0.0764045, 0.0306207 0.0215664, -0.0015342 0.0207133
+  // hid=10, LR=0.001-> error @100k = 0.0562022 -0.0581912, -0.197466 0.221695, 0.0871238 -0.0180035
+  // hid=30, LR=0.001-> error @100k = -0.0322616 0.0764045, 0.0306207 0.0215664, -0.0015342 0.0207133
+  // H1=10, H2=5, LR=0.001-> error @100k = 0.166904 -0.158154, 0.196554 -0.216698, -0.0428546 0.0748254
+  // H1=10, H2=5, LR=0.1-> error @100k = -0.00590095 0.0331212, 0.00333436 0.0344753, 0.00629024 -0.0084966
+  // H1=10, H2=0, LR=0.1-> error @100k = 0.00419072 -0.00631472, -0.0182742 0.0270048, -0.000545248 0.00658341
   int H1 = 10;
-  int H2 = 5;
+  int H2 = 0;
+  int L = H2 == 0 ? 1 : 2;
+  double LR = 0.001;
+
+  vector<Matrix> weights;
+  vector<Matrix> biases;
 
   // hidden_layer_1, H1 nodes fully connected to input layer.
   Matrix w1 = init_matrix(3,H1);
   Matrix b1 = init_matrix(1,H1);
   cout << "w1 = " << endl;
   print_matrix(w1);
+  weights.push_back(w1);
+  biases.push_back(b1);
 
 
   // hidden_layer_2, H2 nodes fully connected to input layer.
-  Matrix w2 = init_matrix(H1,H2);
-  Matrix b2 = init_matrix(1,H2);
-  cout << "w2 = " << endl;
-  print_matrix(w2);
+  if (H2 != 0) {
+    Matrix w2 = init_matrix(H1,H2);
+    Matrix b2 = init_matrix(1,H2);
+    cout << "w2 = " << endl;
+    print_matrix(w2);
+    weights.push_back(w2);
+    biases.push_back(b2);
+  }
 
 
   // output layer, 2 numbers, 5 nodes fully connected to w1.
-  Matrix wOut = init_matrix(H2,2);
+  Matrix wOut = init_matrix(H2 == 0 ? H1 : H2,2);
   Matrix bOut = init_matrix(1,2);
   cout << "wOut = " << endl;
   print_matrix(wOut);
+  weights.push_back(wOut);
+  biases.push_back(bOut);
+  cout << "#weights = " << weights.size();
 
-  vector<Matrix> weights = {w1, w2, wOut};
-  vector<Matrix> biases = {b1, b2, bOut};
+  // vector<Matrix> weights = {w1, w2, wOut};
+  // vector<Matrix> biases = {b1, b2, bOut};
 
   // Matrix x = row_vec({1, 2, 3});
   // Matrix y = row_vec({(1+2)/sqrt(34), (2+3)/sqrt(34)});
@@ -319,16 +336,18 @@ int run_stuff() {
   for (int i = 0; i <= 100000; i ++) {
 
     Matrix x = row_vec({x_dist(re), x_dist(re), x_dist(re)});
+    // Matrix x = row_vec({1, 2, 3});
+
     Matrix y = calc_y(x);
     // cout << "x = " << matrix_string(x);
     // cout << "y = " << matrix_string(y);
 
     auto inputs_activations = feed_forward(x, weights, biases);
-    Matrix pred_y = get<1>(inputs_activations)[1];
-    cout << "pred_y = " << matrix_string(pred_y);
+    Matrix pred_y = get<1>(inputs_activations)[L];
+    // cout << "pred_y = " << matrix_string(pred_y);
     Matrix diff = add(y, scale(-1, pred_y));
     if (i % 1000 == 0) cout << i << " diff = " << matrix_string(diff);
-    back_propagate(weights, biases, x, get<0>(inputs_activations), get<1>(inputs_activations), y, 0.001);
+    back_propagate(weights, biases, x, get<0>(inputs_activations), get<1>(inputs_activations), y, LR);
   }
 }
 
