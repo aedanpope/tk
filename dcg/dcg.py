@@ -44,24 +44,29 @@ class Multiply:
 
 
 class Operation:
+  identifier = None
   inputs = None
   consumers = None
   function = None
   value = None
+  gradient = None
 
-  def __init__(self):
+  def __init__(self, identifier):
+    self.identifier = identifier
     self.inputs = []
     self.consumers = []
 
 
-class CGraph:
+class DifferentiableComputationGraph:
   all_ops = None
+  next_identifier = 0
 
   def __init__(self):
     self.all_ops = []
 
-  def add_op(self, inputs, function):
-    op = Operation()
+  def add_op(self, inputs, function, identifier=None):
+    if identifier is None: identifier = self.next_identifier ++
+    op = Operation(identifier)
     op.inputs = inputs
     op.function = function
     for in_op in inputs:
@@ -69,20 +74,48 @@ class CGraph:
     self.all_ops.append(op)
     return op
 
-  def rec_evaluate(self, op):
+  def recursive_evaluate(self, op):
+    if op.value is not None: return op.value
+
     input_vals = []
     for inp_op in op.inputs:
-      if inp_op.value is None:
-        self.rec_evaluate(inp_op)
-      input_vals.append(inp_op.value)
+      input_vals.append(self.recursive_evaluate(inp_op))
     op.value = op.function.eval(input_vals)
 
-  def evaluate(self, placeholder_op):
-    # should assert that placeholder_op is of type Placeholder
+  def evaluate(self, output_op):
+    # should assert that output_op is of type Placeholder
     # Reset the graph.
     for op in self.all_ops:
       op.value = None
-    self.rec_evaluate(placeholder_op)
-    return placeholder_op.value
+    self.recursive_evaluate(output_op)
+    return output_op.value
+
+  def compute_gradient(self, op):
+    if op.gradient is not None:
+      return op.gradient
+
+    op.gradient = 0
+
+    for consumer in op.consumers:
+      self.compute_gradient(consumer)
+      # op.gradient += consumer.
+
+
+
+  def backprop(self, output_op, output_grad):
+    """ Populates gradients field in all the ops in the graph.
+    """
+    # Reset
+    for op in self.all_ops:
+      op.gradient = None
+
+    # Assign gradient on output.
+    output_op.grad = output_grad
+
+    # Compute all gradients.
+    for op in self.all_ops:
+      self.compute_gradient(op)
+
+
 
 
